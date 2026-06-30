@@ -5,17 +5,21 @@
     XBS is pulled in as a git submodule pinned at v0.3.0 (commit f021ef5)
     per spec § "Dependencies & gotchas". This wrapper:
 
-      1. Adapts our ch_samplesheet → XBS's ch_reads shape
-      2. Adapts ch_reference → XBS's reference channel shape
-      3. Calls XBS_VARIANT_CALLING with XBS-side params already set
-         in conf/backend_gatk_vqsr.config
-      4. Merges XBS's per-sample SNP + INDEL filtered VCFs into a single
-         per-sample VCF via bcftools concat
-      5. Stamps meta + [backend: 'gatk_vqsr', backend_version: 'xbs-v0.3.0', ...]
-         so downstream consensus + provenance can attribute calls
+      1. Builds XBS's required input channels from mtbc-varcaller-nf params:
+         - ch_snp_truth   (required iff params.snp_filter_mode == 'vqsr')
+         - ch_indel_truth (required iff params.indel_filter_mode == 'vqsr')
+         - ch_dbsnp       (required iff !params.skip_bqsr)
+      2. Reshapes our ch_samplesheet meta so XBS's per-library mapping +
+         per-sample groupTuple works (meta.id = study.sample.library)
+      3. Calls XBS_VARIANT_CALLING; XBS's own params (snp_filter_mode,
+         skip_bqsr, target_titv, etc.) are set in conf or by the user.
+      4. Concatenates XBS's per-sample SNP + INDEL filtered VCFs into one
+         per-sample VCF via bcftools concat — the backend interface wants
+         a single per-sample VCF so consensus can vote per record.
+      5. Stamps meta + [backend, backend_version, model] for downstream
+         consensus + provenance.
 
     Gated on params.backends containing 'gatk_vqsr'.
-
     Contract: see docs/CONTRACT.md § "Per-backend module interface".
 */
 
@@ -26,48 +30,83 @@ include { BCFTOOLS_CONCAT     } from '../../modules/nf-core/bcftools/concat/main
 workflow BACKEND_GATK_VQSR {
 
     take:
-    ch_samplesheet  // channel: [ meta(study, sample, library, id, platform), [r1, r2] ]
+    ch_samplesheet  // channel: [ meta(study, sample, library, ...), [r1, r2] ]
     ch_reference    // value:   [ meta(id:'ref'), fasta, fai, dict, [bwa_index_files] ]
 
     main:
 
-    // Backend stamp threaded through every emit
+    // ---- backend stamp threaded through every emit ----
     def backend_stamp = [
-        backend          : 'gatk_vqsr',
-        backend_version  : 'xbs-v0.3.0',
-        model            : 'heupink2021',
-        // container_digest: stamped per-process from the XBS modules themselves;
-        //                    not threaded through subworkflow output meta because
-        //                    XBS uses multiple containers (per Heupink stage)
+        backend         : 'gatk_vqsr',
+        backend_version : 'xbs-v0.3.0',
+        model           : 'heupink2021',
     ]
 
-    // Truth-set + dbsnp channels resolved here (Phase-1 default mirrors XBS test
-    // profile defaults; consumers override via params); for the MVP scaffold these
-    // are documented as required when their respective filter mode is 'vqsr'.
-    def ch_snp_truth   = channel.value([ [id: 'snp_truth'],   [], [] ])
-    def ch_indel_truth = channel.value([ [id: 'indel_truth'], [], [] ])
-    def ch_dbsnp       = channel.value([ [id: 'dbsnp'],       [], [] ])
+    // ---- build XBS truth-set + dbsnp channels from params ----
+    // Mirrors xbs-variant-calling/workflows/xbs-variant-calling.nf §"Truth sets":
+    // truth-set VCFs are required only when the corresponding filter mode is 'vqsr';
+    // dbsnp_vcf is required only when !skip_bqsr. For not-required cases the channel
+    // carries empty list-elements (the nf-core convention for optional inputs).
 
-    // TODO (Phase 1.1): build the truth-set + dbsnp channels from params, mirroring
-    //                   xbs-variant-calling/workflows/xbs-variant-calling.nf §"Truth sets".
-    //                   For now this scaffold compiles and lets consumers wire integration
-    //                   tests against the contract.
+    def ch_snp_truth
+    if (params.snp_filter_mode == 'vqsr') {
+        def snp_truth_vcf = file(params.snp_truth_vcf, checkIfExists: true)
+        def snp_truth_tbi = file(params.snp_truth_vcf_tbi ?: "${params.snp_truth_vcf}.tbi", checkIfExists: true)
+        ch_snp_truth = channel.value([ [id: 'snp_truth'], snp_truth_vcf, snp_truth_tbi ])
+    } else {
+        ch_snp_truth = channel.value([ [id: 'snp_truth'], [], [] ])
+    }
 
+    def ch_indel_truth
+    if (params.indel_filter_mode == 'vqsr') {
+        def indel_truth_vcf = file(params.indel_truth_vcf, checkIfExists: true)
+        def indel_truth_tbi = file(params.indel_truth_vcf_tbi ?: "${params.indel_truth_vcf}.tbi", checkIfExists: true)
+        ch_indel_truth = channel.value([ [id: 'indel_truth'], indel_truth_vcf, indel_truth_tbi ])
+    } else {
+        ch_indel_truth = channel.value([ [id: 'indel_truth'], [], [] ])
+    }
+
+    def ch_dbsnp
+    if (!params.skip_bqsr) {
+        def dbsnp_vcf = file(params.dbsnp_vcf, checkIfExists: true)
+        def dbsnp_tbi = file(params.dbsnp_vcf_tbi ?: "${params.dbsnp_vcf}.tbi", checkIfExists: true)
+        ch_dbsnp = channel.value([ [id: 'dbsnp'], dbsnp_vcf, dbsnp_tbi ])
+    } else {
+        ch_dbsnp = channel.value([ [id: 'dbsnp'], [], [] ])
+    }
+
+    // ---- reshape samplesheet meta so XBS's per-library mapping works ----
+    // XBS_PER_SAMPLE maps per-library on meta.id and collapses libraries into
+    // per-sample BAMs by groupTuple on meta.sample. So meta.id must be unique
+    // per library (study.sample.library), and meta.sample must be set.
+    def ch_reads = ch_samplesheet.map { meta, reads ->
+        def study   = meta.study   ?: 'na'
+        def sample  = meta.sample  ?: meta.id
+        def library = meta.library ?: '1'
+        def new_meta = meta + [
+            id      : "${study}.${sample}.${library}",
+            study   : study,
+            sample  : sample,
+            library : library,
+        ]
+        [ new_meta, reads ]
+    }
+
+    // ---- call XBS ----
     XBS_VARIANT_CALLING(
-        ch_samplesheet,
+        ch_reads,
         ch_reference,
         ch_snp_truth,
         ch_indel_truth,
         ch_dbsnp,
     )
 
-    // Per-sample concat: XBS emits snp_filtered + indel_filtered separately. The
-    // backend interface wants ONE per-sample VCF (so consensus voting can be done
-    // per record). bcftools concat with -a (allow overlap) handles the join.
+    // ---- per-sample SNP + INDEL → single VCF (bcftools concat) ----
+    // bcftools/concat expects [meta, [vcfs], [tbis]]; group SNP + INDEL pair per sample.
     def ch_per_sample_pairs = XBS_VARIANT_CALLING.out.snp_filtered
         .join(XBS_VARIANT_CALLING.out.indel_filtered)
         .map { meta, snp_vcf, snp_tbi, indel_vcf, indel_tbi ->
-            // group SNP + INDEL VCFs (and their tbis) into the lists bcftools/concat expects
+            // Stamp backend identity into meta — this is what consensus+provenance bind to.
             [ meta + backend_stamp, [snp_vcf, indel_vcf], [snp_tbi, indel_tbi] ]
         }
 
@@ -75,7 +114,7 @@ workflow BACKEND_GATK_VQSR {
 
     emit:
     // Stable per-backend interface (see docs/CONTRACT.md § "Per-backend module interface")
-    vcf      = BCFTOOLS_CONCAT.out.vcf.join(BCFTOOLS_CONCAT.out.tbi)   // [ meta+stamp, vcf, tbi ]
-    gvcfs    = XBS_VARIANT_CALLING.out.gvcfs                          // [ meta, gvcf, tbi ]  (for cohort-stage replacement)
-    versions = channel.empty()                                         // versions come via topic
+    vcf      = BCFTOOLS_CONCAT.out.vcf.join(BCFTOOLS_CONCAT.out.index)   // [ meta+stamp, vcf, tbi ]
+    gvcfs    = XBS_VARIANT_CALLING.out.gvcfs                             // [ meta, gvcf, tbi ]  (for cohort-stage replacement)
+    versions = channel.empty()                                            // versions come via topic
 }

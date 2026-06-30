@@ -2,32 +2,50 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/mycobactopia-org/mtbc-varcaller-nf/master/assets/schema_input.json",
     "title": "mycobactopia-org/mtbc-varcaller-nf pipeline - params.input schema",
-    "description": "Schema for the file provided with params.input",
+    "description": "Samplesheet schema. MAGMA-compatible per-library shape (study, sample, library, r1, r2, platform). The XBS gatk_vqsr backend consumes this directly. See docs/CONTRACT.md.",
     "type": "array",
     "items": {
         "type": "object",
         "properties": {
+            "study": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Study name must be provided and cannot contain spaces",
+                "meta": ["study"]
+            },
             "sample": {
                 "type": "string",
                 "pattern": "^\\S+$",
                 "errorMessage": "Sample name must be provided and cannot contain spaces",
-                "meta": ["id"]
+                "meta": ["sample", "id"]
             },
-            "fastq_1": {
+            "library": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Library name must be provided and cannot contain spaces; one row per library when a sample has multiple",
+                "meta": ["library"]
+            },
+            "platform": {
+                "type": "string",
+                "enum": ["illumina", "ont"],
+                "errorMessage": "Platform must be 'illumina' or 'ont'",
+                "meta": ["platform"]
+            },
+            "r1": {
                 "type": "string",
                 "format": "file-path",
                 "exists": true,
                 "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.f(ast)?q\\.gz$",
-                "errorMessage": "FastQ file for reads 1 must be provided, cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
+                "errorMessage": "Read 1 FASTQ must exist, cannot contain spaces, and must end in .fq.gz or .fastq.gz"
             },
-            "fastq_2": {
+            "r2": {
                 "type": "string",
                 "format": "file-path",
                 "exists": true,
                 "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.f(ast)?q\\.gz$",
-                "errorMessage": "FastQ file for reads 2 cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
+                "errorMessage": "Read 2 FASTQ must exist, cannot contain spaces, and must end in .fq.gz or .fastq.gz"
             }
         },
-        "required": ["sample", "fastq_1"]
+        "required": ["study", "sample", "library", "r1"]
     }
 }
