@@ -13,7 +13,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-include { MTBC-VARCALLER-NF  } from './workflows/mtbc-varcaller-nf'
+include { MTBC_VARCALLER_NF  } from './workflows/mtbc-varcaller-nf'
 include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_mtbc-varcaller-nf_pipeline'
 include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_mtbc-varcaller-nf_pipeline'
 /*
@@ -25,7 +25,7 @@ include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_mtbc
 //
 // WORKFLOW: Run main analysis pipeline depending on type of input
 //
-workflow MYCOBACTOPIAORG_MTBC-VARCALLER-NF {
+workflow MYCOBACTOPIAORG_MTBC_VARCALLER_NF {
 
     take:
     samplesheet // channel: samplesheet read in from --input
@@ -35,7 +35,7 @@ workflow MYCOBACTOPIAORG_MTBC-VARCALLER-NF {
     //
     // WORKFLOW: Run pipeline
     //
-    MTBC-VARCALLER-NF (
+    MTBC_VARCALLER_NF (
         samplesheet,
         params.outdir,
     )
@@ -67,7 +67,7 @@ workflow {
     //
     // WORKFLOW: Run main workflow
     //
-    MYCOBACTOPIAORG_MTBC-VARCALLER-NF (
+    MYCOBACTOPIAORG_MTBC_VARCALLER_NF (
         PIPELINE_INITIALISATION.out.samplesheet
     )
     //

@@ -8,3 +8,6 @@ testing*
 *.pyc
 null/
 .lineage/
+
+# Manuscript scaffold (Ulysses iPad sync; orthogonal to pipeline)
+writeup/

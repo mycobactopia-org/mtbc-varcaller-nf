@@ -13,7 +13,7 @@ include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_mtbc
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-workflow MTBC-VARCALLER-NF {
+workflow MTBC_VARCALLER_NF {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input

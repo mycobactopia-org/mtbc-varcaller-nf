@@ -1,91 +1,141 @@
 # mycobactopia-org/mtbc-varcaller-nf
 
-
-[![GitHub Actions CI Status](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/nf-test.yml/badge.svg)](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/nf-test.yml)
-[![GitHub Actions Linting Status](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/linting.yml/badge.svg)](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/linting.yml)[![Cite with Zenodo](http://img.shields.io/badge/DOI-10.5281/zenodo.XXXXXXX-1073c8?labelColor=000000)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![GitHub Actions Linting Status](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/linting.yml/badge.svg)](https://github.com/mycobactopia-org/mtbc-varcaller-nf/actions/workflows/linting.yml)
 [![nf-test](https://img.shields.io/badge/unit_tests-nf--test-337ab7.svg)](https://www.nf-test.com)
-
 [![Nextflow](https://img.shields.io/badge/version-%E2%89%A525.10.4-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
 [![nf-core template version](https://img.shields.io/badge/nf--core_template-4.0.2-green?style=flat&logo=nfcore&logoColor=white&color=%2324B064&link=https%3A%2F%2Fnf-co.re)](https://github.com/nf-core/tools/releases/tag/4.0.2)
-[![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
-[![Launch on Seqera Platform](https://img.shields.io/badge/Launch%20%F0%9F%9A%80-Seqera%20Platform-%234256e7)](https://cloud.seqera.io/launch?pipeline=https://github.com/mycobactopia-org/mtbc-varcaller-nf)
 
 ## Introduction
 
-**mycobactopia-org/mtbc-varcaller-nf** is a bioinformatics pipeline that ...
+**mycobactopia-org/mtbc-varcaller-nf** is the **variant-calling building block** of the [`mtbc-*-nf` family](https://github.com/mycobactopia-org) — a multi-backend, consensus-normalised MTBC variant-calling substrate. It runs **multiple variant-calling backends** (XBS / Clair3 / DeepVariant — and SV / minority backends later), **normalises** their outputs to a canonical representation via `bcftools norm`, optionally **converges** them into one consensus, and exposes the logic as an **importable subworkflow** `MTBC_VARCALLING` consumed by mtbc-resistotyper-nf, tbanalyzer, MAGMA-v2, and any downstream database / pipeline that needs reproducible, provenance-stamped MTBC variant calls.
 
-<!-- TODO nf-core:
-   Complete this sentence with a 2-3 sentence summary of what types of data the pipeline ingests, a brief overview of the
-   major pipeline sections and the types of output it produces. You're giving an overview to someone new
-   to nf-core here, in 15-20 seconds. For an example, see https://github.com/nf-core/rnaseq/blob/master/README.md#introduction
--->
+> **The linchpin claim:** consensus is only meaningfully "more accurate" than the best single backend if the benchmark says so. Phase-2 measures that head-to-head; **if convergence doesn't beat best-single, the pipeline still ships** — its value is *provenance + backend-swappability + reproducibility*.
 
-<!-- TODO nf-core: Include a figure that guides the user through the major workflow steps. Many nf-core
-     workflows use the "tube map" design for that. See https://nf-co.re/docs/community/brand/workflow-schematics#examples for examples.   -->
-<!-- TODO nf-core: Fill in short bullet-pointed list of the default steps in the pipeline -->
+Reference: spec `abc-universe/specs/active/mtbc-varcaller-nf.md`; family vision `abc-universe/brainstorms/mtbc-building-blocks/2026-06-30-mtbc-nf-building-block-family.md`.
+
+### Pipeline shape
+
+| | Phase 1 (this scaffold) | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Small-variant backends | `gatk_vqsr` (via XBS), `clair3` | `+ deepvariant` | — |
+| Normalisation | `bcftools norm` (left-align + split MA + dedup) | — | `+ --vrs` (GA4GH allele IDs) |
+| Consensus | `best_single` (mandatory), `majority` | — | `+ external` (ML meta-caller) |
+| SV track | — | — | `delly`, `manta`, `gridss` (short-read); `sniffles2`, `cutesv` (ONT); merge via `SURVIVOR`/`Jasmine`; benchmark with Truvari |
+| Minority track | — | — | `lofreq` (separate track, not voted into germline consensus) |
+| Benchmark harness | — | **first-class deliverable** (hap.py / vcfeval vs in-silico truth + held-out real) | + Truvari for SV |
+
+### The XBS connection (first integration)
+
+XBS (the canonical Heupink 2021 GATK-VQSR caller) is pulled in as the Phase-1 **`gatk_vqsr` backend** via a **git submodule** pinned at `v0.3.0` (commit `f021ef5`). XBS is an **independent unit** — MAGMA imports XBS too, mtbc-varcaller-nf imports XBS too, neither forks it. When XBS updates, bump the submodule pin here; downstream consumers of mtbc-varcaller-nf get the new behaviour by re-pulling.
+
+```
+mtbc-varcaller-nf/
+├── submodules/
+│   └── xbs-variant-calling/      ← pinned at v0.3.0
+└── subworkflows/local/
+    └── backend_gatk_vqsr.nf      ← wraps XBS_VARIANT_CALLING, stamps backend meta
+```
+
+### Position in the family
+
+| Block | Step | Status |
+|---|---|---|
+| `mtbc-qc-nf` | read QC / trim | future |
+| `mtbc-aligner-nf` | read alignment | future |
+| **`mtbc-varcaller-nf`** | **variant calling (small + SV + minority)** | **Phase-1 scaffold (this repo)** |
+| `mtbc-resistotyper-nf` | resistance prediction | Phase-1 scaffold |
+| `mtbc-lineage-nf` | lineage / typing | future |
+| `mtbc-phylo-nf` | phylogenetics | future |
+| `mtbc-cluster-nf` | SNP-distance clustering | future |
+| `mtbc-transmission-nf` | transmission inference | future |
 
 ## Usage
 
 > [!NOTE]
-> If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/get_started/environment_setup/overview) on how to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/get_started/run-your-first-pipeline) with `-profile test` before running the workflow on actual data.
+> If you are new to Nextflow, refer to [the nf-core docs](https://nf-co.re/docs/get_started/environment_setup/overview).
 
-<!-- TODO nf-core: Describe the minimum required steps to execute the pipeline, e.g. how to prepare samplesheets.
-     Explain what rows and columns represent. For instance (please edit as appropriate):
+Clone with submodules:
 
-First, prepare a samplesheet with your input data that looks as follows:
-
-`samplesheet.csv`:
-
-```csv
-sample,fastq_1,fastq_2
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz
+```bash
+git clone --recurse-submodules git@github.com:mycobactopia-org/mtbc-varcaller-nf.git
+# or, if already cloned:
+git submodule update --init --recursive
 ```
 
-Each row represents a fastq file (single-end) or a pair of fastq files (paired end).
-
--->
-
-Now, you can run the pipeline using:
-
-<!-- TODO nf-core: update the following command to include all required parameters for a minimal example -->
+Run:
 
 ```bash
 nextflow run mycobactopia-org/mtbc-varcaller-nf \
-   -profile <docker/singularity/.../institute> \
-   --input samplesheet.csv \
-   --outdir <OUTDIR>
+    -profile <docker|singularity|conda>,test \
+    --input samplesheet.csv \
+    --backends gatk_vqsr,clair3 \
+    --consensus best_single --consensus_backend gatk_vqsr \
+    --reference_dir resources/genome --reference_basename NC-000962-3-H37Rv \
+    --outdir results/
 ```
 
-> [!WARNING]
-> Please provide pipeline parameters via the CLI or Nextflow `-params-file` option. Custom config files including those provided by the `-c` Nextflow option can be used to provide any configuration _**except for parameters**_; see [docs](https://nf-co.re/docs/running/run-pipelines#using-parameter-files).
+### Switching backends / consensus by config alone
+
+The whole point of the substrate: **a consumer can switch backends and consensus by config alone, without changing the consumer's analytical logic.** From a consumer (tbanalyzer, mtbc-resistotyper-nf, MAGMA-v2):
+
+```groovy
+include { MTBC_VARCALLING } from '<this-path>/subworkflows/local/mtbc_varcalling_wf'
+
+workflow {
+    MTBC_VARCALLING(ch_samplesheet, ch_reference)
+    DOWNSTREAM(MTBC_VARCALLING.out.vcf)   // or .per_backend_vcfs, etc.
+}
+```
+
+Run-time config drives behaviour:
+
+```
+# best-single XBS (Phase-1 default — the "consensus didn't win" path)
+--backends gatk_vqsr --consensus best_single
+
+# majority of XBS + Clair3
+--backends gatk_vqsr,clair3 --consensus majority --consensus_min_votes 2
+
+# intersection (high-precision; both must agree)
+--backends gatk_vqsr,clair3 --consensus intersection
+```
+
+## Outputs
+
+- **Per-sample consensus VCF** (`*.vcf.gz`) — normalised + provenance-stamped (`BACKENDS`, `BACKEND_VAF`, `BACKEND_FILTER`, `CONSENSUS_MODEL`, `CONSENSUS_VOTES` in INFO)
+- **Per-backend canonical VCFs** (`per_backend_vcfs/`) — pre-consensus, normalised, for downstream consumers that want raw per-backend output
+- **SV VCF** (Phase 3) — separate variant class, class-labelled
+- **Versions** — standard nf-core `versions.yml`
+
+See [`docs/CONTRACT.md`](docs/CONTRACT.md) for the full `take:` / `emit:` interface contract that consumer pipelines bind to.
 
 ## Credits
 
-mycobactopia-org/mtbc-varcaller-nf was originally written by Abhinav Sharma.
+mycobactopia-org/mtbc-varcaller-nf was developed by Abhinav Sharma as part of the `mtbc-*-nf` building-block family.
 
-We thank the following people for their extensive assistance in the development of this pipeline:
+Backends wrapped:
+- **XBS** ([mycobactopia-org/xbs-variant-calling](https://github.com/mycobactopia-org/xbs-variant-calling)) — Phase-1 `gatk_vqsr` backend (Heupink 2021 GATK-VQSR; pinned at v0.3.0)
+- **Clair3** — Phase-1; platform-aware models
+- **DeepVariant** — Phase 2
+- **DELLY / Manta / GRIDSS / Sniffles2 / cuteSV** — Phase 3 (SV track)
+- **LoFreq** — Phase 3 (minority-variant track)
 
-<!-- TODO nf-core: If applicable, make list of people who have also contributed -->
+ML default backend slot reserved for `mtb-varcaller-ml` (future; see family vision §6).
 
 ## Contributions and Support
 
-If you would like to contribute to this pipeline, please see the [contributing guidelines](docs/CONTRIBUTING.md).
+If you would like to contribute, please see [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 
 ## Citations
 
-<!-- TODO nf-core: Add citation for pipeline after first release. Uncomment lines below and update Zenodo doi and badge at the top of this file. -->
-<!-- If you use mycobactopia-org/mtbc-varcaller-nf for your analysis, please cite it using the following doi: [10.5281/zenodo.XXXXXX](https://doi.org/10.5281/zenodo.XXXXXX) -->
+This pipeline is part of the `mtbc-*-nf` family. Cite the building-block family architecture (Sharma A et al., in preparation) and the backends used — see [`CITATIONS.md`](CITATIONS.md).
 
-<!-- TODO nf-core: Add bibliography of tools and data used in your pipeline -->
-
-An extensive list of references for the tools used by the pipeline can be found in the [`CITATIONS.md`](CITATIONS.md) file.
-
-This pipeline uses code and infrastructure developed and maintained by the [nf-core](https://nf-co.re) community, reused here under the [MIT license](https://github.com/nf-core/tools/blob/main/LICENSE).
+This pipeline reuses scaffolding from the [nf-core](https://nf-co.re) community framework under the [MIT license](https://github.com/nf-core/tools/blob/main/LICENSE):
 
 > **The nf-core framework for community-curated bioinformatics pipelines.**
 >
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
-> _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
+> *Nat Biotechnol.* 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).

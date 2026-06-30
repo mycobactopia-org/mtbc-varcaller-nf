@@ -1,0 +1,4 @@
+[submodule "submodules/xbs-variant-calling"]
+	path = submodules/xbs-variant-calling
+	url = git@github.com:mycobactopia-org/xbs-variant-calling.git
+	branch = master
