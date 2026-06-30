@@ -13,7 +13,7 @@
 
 > **The linchpin claim:** consensus is only meaningfully "more accurate" than the best single backend if the benchmark says so. Phase-2 measures that head-to-head; **if convergence doesn't beat best-single, the pipeline still ships** — its value is *provenance + backend-swappability + reproducibility*.
 
-Reference: spec `abc-universe/specs/active/mtbc-varcaller-nf.md`; family vision `abc-universe/brainstorms/mtbc-building-blocks/2026-06-30-mtbc-nf-building-block-family.md`.
+Reference: spec `abc-universe/specs/active/mtbc-varcaller-nf.md`; family vision `abc-universe/brainstorms/mtbc-building-blocks/2026-06-30-mtbc-nf-building-block-family.md`; design lineage and adoption rationale vs **Bactopia / nf-core/funcscan / bacannot / nf-core/bacass** in [`docs/RELATED_WORK.md`](docs/RELATED_WORK.md).
 
 ### Pipeline shape
 
