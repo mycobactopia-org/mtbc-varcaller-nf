@@ -1,0 +1,59 @@
+repository_type: pipeline
+
+nf_core_version: 4.0.2
+
+lint:
+  files_unchanged:
+    - .prettierignore
+    - CODE_OF_CONDUCT.md
+    - assets/nf-core-mtbc-varcaller-nf_logo_light.png
+    - docs/images/nf-core-mtbc-varcaller-nf_logo_light.png
+    - docs/images/nf-core-mtbc-varcaller-nf_logo_dark.png
+    - .github/ISSUE_TEMPLATE/bug_report.yml
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - assets/email_template.txt
+    - docs/README.md
+    - docs/CONTRIBUTING.md
+    - assets/sendmail_template.txt
+    - .prettierignore
+  nextflow_config:
+    - manifest.name
+    - manifest.homePage
+  multiqc_config: false
+  files_exist:
+    - conf/igenomes.config
+    - conf/igenomes_ignored.config
+    - assets/email_template.html
+    - assets/sendmail_template.txt
+    - assets/email_template.txt
+    - CODE_OF_CONDUCT.md
+    - assets/nf-core-mtbc-varcaller-nf_logo_light.png
+    - docs/images/nf-core-mtbc-varcaller-nf_logo_light.png
+    - docs/images/nf-core-mtbc-varcaller-nf_logo_dark.png
+    - .github/ISSUE_TEMPLATE/config.yml
+    - .github/workflows/awstest.yml
+    - .github/workflows/awsfulltest.yml
+    - assets/multiqc_config.yml
+
+template:
+  org: mycobactopia-org
+  name: mtbc-varcaller-nf
+  description: Multi-backend, consensus-normalised MTBC variant-calling substrate.
+    Runs configurable backends (XBS / Clair3 / DeepVariant), normalises to bcftools-norm
+    canonical form, optionally converges, and emits an importable MTBC_VARCALLING
+    subworkflow with per-call provenance. Phase 1 = gatk_vqsr (XBS) + Clair3.
+  author: Abhinav Sharma
+  version: 0.1.0dev
+  force: true
+  outdir: /tmp/mtbc-varcaller-nf-scaffold
+  skip_features:
+    - igenomes
+    - multiqc
+    - fastqc
+    - seqera_platform
+    - gpu
+    - codespaces
+    - vscode
+    - rocrate
+    - email
+  is_nfcore: false
